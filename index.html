@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>AI Image Agent — Dark UI</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+            }
+        </style>
+    </head>
+    <body class="bg-gray-900 text-gray-100 min-h-screen">
+        <div class="max-w-3xl mx-auto p-6">
+            <h1 class="text-3xl font-bold mb-2">AI Image Agent</h1>
+            <p class="text-gray-400 mb-6">
+                Gib ein Thema ein, wähle Stile und klicke <strong>Generate Images</strong>.
+            </p>
+
+            <label class="block mb-2 font-semibold">Thema / Nachricht</label>
+            <textarea
+                id="prompt"
+                class="w-full p-3 rounded bg-gray-800 border border-gray-700"
+                rows="3"
+                placeholder="z. B. spider man vs venom"></textarea>
+
+            <label class="block mt-4 mb-2 font-semibold">Stile (Mehrfachauswahl)</label>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Anime / Manga" class="style-checkbox" /> Anime /
+                    Manga</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input
+                        type="checkbox"
+                        value="Hyperrealistic / Photoreal"
+                        class="style-checkbox" />
+                    Hyperrealistic</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Cyberpunk / Neon" class="style-checkbox" />
+                    Cyberpunk</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Vintage Film / 35mm" class="style-checkbox" />
+                    Vintage Film</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Surreal / Dreamcore" class="style-checkbox" />
+                    Surreal</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Graffiti / Street Art" class="style-checkbox" />
+                    Graffiti</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Watercolor / Painterly" class="style-checkbox" />
+                    Watercolor</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Concept Art / Matte" class="style-checkbox" />
+                    Concept Art</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="3D / Pixar" class="style-checkbox" /> 3D /
+                    Pixar</label
+                >
+                <label class="inline-flex items-center gap-2"
+                    ><input type="checkbox" value="Noir / Film Noir" class="style-checkbox" />
+                    Noir</label
+                >
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <input
+                    id="workerUrl"
+                    class="flex-1 p-2 rounded bg-gray-800 border border-gray-700"
+                    placeholder="Dein Worker Webhook URL (z. B. https://.../generate)" />
+                <button
+                    id="generateBtn"
+                    class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700">
+                    Generate Images
+                </button>
+            </div>
+
+            <div id="status" class="mt-4 text-sm text-gray-300"></div>
+
+            <div id="results" class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
+
+        <script>
+            const generateBtn = document.getElementById("generateBtn");
+            const statusEl = document.getElementById("status");
+            const resultsEl = document.getElementById("results");
+
+            function getSelectedStyles() {
+                const boxes = Array.from(document.querySelectorAll(".style-checkbox"));
+                const chosen = boxes.filter((b) => b.checked).map((b) => b.value);
+                return chosen.length
+                    ? chosen
+                    : [
+                          "Anime / Manga",
+                          "Hyperrealistic / Photoreal",
+                          "Cyberpunk / Neon",
+                          "Vintage Film / 35mm",
+                          "Surreal / Dreamcore",
+                      ];
+            }
+
+            generateBtn.addEventListener("click", async () => {
+                const prompt = document.getElementById("prompt").value.trim();
+                const workerUrl = document.getElementById("workerUrl").value.trim();
+                if (!prompt || !workerUrl) {
+                    alert("Bitte Thema + Worker URL angeben");
+                    return;
+                }
+
+                const styles = getSelectedStyles();
+                statusEl.textContent = "Job gesendet — generiere Bilder…";
+                resultsEl.innerHTML = "";
+
+                try {
+                    const res = await fetch(workerUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ input: prompt, styles }),
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                        statusEl.textContent = "Fehler: " + data.error;
+                        return;
+                    }
+                    statusEl.textContent = "Bilder generiert: " + (data.images?.length || 0);
+                    (data.images || []).forEach((item) => {
+                        const card = document.createElement("div");
+                        card.className = "bg-gray-800 p-3 rounded";
+                        card.innerHTML = `
+        <div class="text-sm text-gray-300 mb-2">${item.style}</div>
+        <img src="${item.url}" alt="${item.style}" class="w-full rounded mb-2"/>
+        <a href="${item.url}" target="_blank" class="text-indigo-400 text-sm">Open / Download</a>
+      `;
+                        resultsEl.appendChild(card);
+                    });
+                } catch (err) {
+                    statusEl.textContent = "Fehler: " + err.message;
+                }
+            });
+        </script>
+    </body>
+</html>
