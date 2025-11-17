@@ -1,0 +1,13 @@
+{
+    "name": "ai-image-agent-ui",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tailwindcss -i ./styles/input.css -o ./styles/output.css",
+        "watch": "tailwindcss -i ./styles/input.css -o ./styles/output.css --watch"
+    },
+    "devDependencies": {
+        "tailwindcss": "^3.4.1"
+    }
+}
