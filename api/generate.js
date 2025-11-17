@@ -1,12 +1,12 @@
 // Dateiname: /api/generate.js
-// Dieses Backend kann BEIDE Dienste ansteuern: Cloudflare & Hugging Face
+// KORRIGIERTE VERSION mit dem neuen Hugging Face Router-Endpunkt
 
 export default async function handler(req, res) {
     // 1. Guards und Daten holen
     if (req.method !== "POST") {
         return res.status(405).send({ error: "Method Not Allowed" });
     }
-    const { prompt, style, engine = "cf" } = req.body; // 'engine' ist neu, 'cf' ist Standard
+    const { prompt, style, engine = "cf" } = req.body;
     if (!prompt || !style) {
         return res.status(400).send({ error: "Missing prompt or style" });
     }
@@ -16,25 +16,28 @@ export default async function handler(req, res) {
 
     const finalPrompt = `Create ${style} artwork of: ${prompt}`;
     let apiResponse;
-    let contentType = "image/png"; // Standard-Annahme
+    let contentType = "image/png";
 
     try {
         // 3. ENTSCHEIDUNG: Welche Engine wird genutzt?
         if (engine === "hf") {
-            // --- LOGIK FÜR HUGGING FACE ---
+            // --- KORRIGIERTE LOGIK FÜR HUGGING FACE ---
             if (!HF_TOKEN) throw new Error("Missing HF_TOKEN");
 
-            // Du kannst hier jedes Modell von HF verwenden, das Text-zu-Bild unterstützt
-            const MODEL_URL =
-                "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+            // Der neue Endpunkt, den die Fehlermeldung vorschlägt:
+            const ROUTER_URL = "https://router.huggingface.co/hf-inference";
+            const MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"; // Das Modell, das wir nutzen wollen
 
-            apiResponse = await fetch(MODEL_URL, {
+            apiResponse = await fetch(ROUTER_URL, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${HF_TOKEN}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ inputs: finalPrompt }),
+                body: JSON.stringify({
+                    model: MODEL_ID, // WICHTIG: Modell-ID jetzt im Body
+                    inputs: finalPrompt,
+                }),
             });
             contentType = apiResponse.headers.get("Content-Type") || "image/jpeg";
         } else {
@@ -57,7 +60,7 @@ export default async function handler(req, res) {
 
         // 4. Gemeinsame Antwort-Logik (für BEIDE)
         if (!apiResponse.ok) {
-            const errorText = await apiResponse.text();
+            const errorText = await apiResponse.text(); // Hol dir den genauen Fehlertext
             throw new Error(`API error (${apiResponse.status}): ${errorText}`);
         }
 
@@ -70,6 +73,7 @@ export default async function handler(req, res) {
         res.status(200).send(imageBuffer);
     } catch (error) {
         console.error("Handler error:", error);
+        // Sende den Fehler als JSON zurück, damit das Frontend ihn anzeigen kann
         res.status(500).json({ error: "Failed to generate image", details: error.message });
     }
 }
