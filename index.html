@@ -43,6 +43,18 @@
                 rows="3"
                 placeholder="z. B. spider man vs venom"></textarea>
 
+            <label class="block mt-4 mb-2 font-semibold">KI-Engine</label>
+            <div class="flex gap-4 mb-4">
+                <label class="inline-flex items-center gap-2">
+                    <input type="radio" name="engine" value="cf" class="form-radio" checked />
+                    Cloudflare (Schnell & Kostenlos)
+                </label>
+                <label class="inline-flex items-center gap-2">
+                    <input type="radio" name="engine" value="hf" class="form-radio" />
+                    Hugging Face (Alternativ)
+                </label>
+            </div>
+
             <label class="block mt-4 mb-2 font-semibold">Stile (Mehrfachauswahl)</label>
             <div class="grid grid-cols-2 gap-2">
                 <label class="inline-flex items-center gap-2"
@@ -115,60 +127,65 @@
                 return chosen;
             }
 
+            // NEUE Funktion, um die Engine auszulesen
+            function getSelectedEngine() {
+                const selected = document.querySelector('input[name="engine"]:checked');
+                return selected ? selected.value : "cf"; // Standard auf 'cf'
+            }
+
             generateBtn.addEventListener("click", async () => {
                 const prompt = promptEl.value.trim();
                 const styles = getSelectedStyles();
+                const engine = getSelectedEngine(); // Engine-Auswahl holen
 
-                if (!prompt) {
-                    alert("Bitte ein Thema angeben.");
-                    return;
-                }
-                if (styles.length === 0) {
-                    alert("Bitte mindestens einen Stil auswählen.");
+                if (!prompt || styles.length === 0) {
+                    alert("Bitte Thema und mindestens einen Stil auswählen.");
                     return;
                 }
 
-                // Button deaktivieren und Status löschen
                 generateBtn.disabled = true;
                 generateBtn.textContent = "Generiere...";
                 statusEl.textContent = `Sende ${styles.length} Aufträge...`;
                 resultsEl.innerHTML = "";
 
-                // Schleife: Rufe die API für JEDEN ausgewählten Stil einzeln auf
                 for (const style of styles) {
-                    // 1. Erstelle SOFORT eine Platzhalter-Karte mit Spinner
+                    // 1. Platzhalter-Karte mit Spinner
                     const placeholderCard = document.createElement("div");
                     placeholderCard.className = "bg-gray-800 p-3 rounded";
                     placeholderCard.innerHTML = `
-                <div class="text-sm text-gray-300 mb-2">${style}</div>
-                <div class="flex items-center justify-center h-48"> <div class="spinner"></div>
+                <div class="text-sm text-gray-300 mb-2">${style} (${engine.toUpperCase()})</div>
+                <div class="flex items-center justify-center h-48">
+                    <div class="spinner"></div>
                 </div>
                 <div class="text-indigo-400 text-sm mt-2">Generiere...</div>
             `;
                     resultsEl.appendChild(placeholderCard);
                     statusEl.textContent = `Generiere Stil: ${style}...`;
 
-                    // 2. Starte jetzt erst den API-Aufruf
                     try {
+                        // 2. API-Aufruf (sendet jetzt die 'engine' mit)
                         const response = await fetch("/api/generate", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 prompt: prompt,
                                 style: style,
+                                engine: engine, // HIER wird die Auswahl mitgesendet
                             }),
                         });
 
+                        // ZURÜCK ZUR BLOB-LOGIK (wie vor Imgur)
                         if (!response.ok) {
                             throw new Error(`Server-Fehler: ${response.statusText}`);
                         }
 
+                        // 3. Bild-Blob (statt JSON) empfangen
                         const imageBlob = await response.blob();
                         const imageUrl = URL.createObjectURL(imageBlob);
 
-                        // 3. ERSETZE den Spinner-Inhalt mit dem finalen Bild
+                        // 4. ERSETZE den Spinner mit dem finalen Bild
                         placeholderCard.innerHTML = `
-                    <div class="text-sm text-gray-300 mb-2">${style}</div>
+                    <div class="text-sm text-gray-300 mb-2">${style} (${engine.toUpperCase()})</div>
                     <img src="${imageUrl}" alt="${style}" class="w-full rounded mb-2"/>
                     <a href="${imageUrl}" target="_blank" download="${prompt.replace(
                             /\s+/g,
@@ -176,10 +193,10 @@
                         )}-${style}.png" class="text-indigo-400 text-sm">Open / Download</a>
                 `;
                     } catch (err) {
+                        // 5. Fehler-Karte
                         console.error(err);
-                        // 4. ERSETZE den Spinner-Inhalt mit einer Fehlermeldung
                         placeholderCard.innerHTML = `
-                    <div class="text-sm text-gray-300 mb-2">${style}</div>
+                    <div class="text-sm text-gray-300 mb-2">${style} (${engine.toUpperCase()})</div>
                     <div class="flex items-center justify-center h-48 bg-gray-700 rounded">
                         <span class="text-red-400 p-4">Fehler: ${err.message}</span>
                     </div>

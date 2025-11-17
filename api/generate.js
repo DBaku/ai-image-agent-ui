@@ -1,78 +1,75 @@
 // Dateiname: /api/generate.js
-// Dies ist deine sichere Server-Funktion.
+// Dieses Backend kann BEIDE Dienste ansteuern: Cloudflare & Hugging Face
 
 export default async function handler(req, res) {
-    // 1. Nur POST-Anfragen erlauben
+    // 1. Guards und Daten holen
     if (req.method !== "POST") {
         return res.status(405).send({ error: "Method Not Allowed" });
     }
-
-    // 2. Daten aus der UI holen (z.B. den Text-Prompt)
-    const { prompt, style } = req.body;
-    if (!prompt) {
-        return res.status(400).send({ error: "Missing prompt" });
+    const { prompt, style, engine = "cf" } = req.body; // 'engine' ist neu, 'cf' ist Standard
+    if (!prompt || !style) {
+        return res.status(400).send({ error: "Missing prompt or style" });
     }
 
-    // 3. Keys sicher aus den Vercel Environment Variables laden
-    const HF_TOKEN = process.env.HF_TOKEN;
-    const CF_TOKEN = process.env.CF_TOKEN;
-    const CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID;
+    // 2. Keys sicher laden
+    const { CF_TOKEN, CF_ACCOUNT_ID, HF_TOKEN } = process.env;
 
-    // Erstelle den fertigen Prompt
     const finalPrompt = `Create ${style} artwork of: ${prompt}`;
+    let apiResponse;
+    let contentType = "image/png"; // Standard-Annahme
 
     try {
-        // 4. ANFRAGE AN CLOUDFLARE AI
-        // Wir nutzen das Stable Diffusion Modell von Cloudflare
-        const cfResponse = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/stabilityai/stable-diffusion-xl-base-1.0`,
-            {
+        // 3. ENTSCHEIDUNG: Welche Engine wird genutzt?
+        if (engine === "hf") {
+            // --- LOGIK FÜR HUGGING FACE ---
+            if (!HF_TOKEN) throw new Error("Missing HF_TOKEN");
+
+            // Du kannst hier jedes Modell von HF verwenden, das Text-zu-Bild unterstützt
+            const MODEL_URL =
+                "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+
+            apiResponse = await fetch(MODEL_URL, {
                 method: "POST",
                 headers: {
-                    Authorization: `Bearer ${CF_TOKEN}`,
+                    Authorization: `Bearer ${HF_TOKEN}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    prompt: finalPrompt,
-                }),
-            }
-        );
+                body: JSON.stringify({ inputs: finalPrompt }),
+            });
+            contentType = apiResponse.headers.get("Content-Type") || "image/jpeg";
+        } else {
+            // --- LOGIK FÜR CLOUDFLARE (Standard) ---
+            if (!CF_TOKEN || !CF_ACCOUNT_ID) throw new Error("Missing CF_TOKEN or CF_ACCOUNT_ID");
 
-        // WICHTIG: Cloudflare sendet das Bild direkt als Binärdaten, nicht als JSON
-        if (!cfResponse.ok) {
-            throw new Error(`Cloudflare API error: ${cfResponse.statusText}`);
+            apiResponse = await fetch(
+                `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/stabilityai/stable-diffusion-xl-base-1.0`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${CF_TOKEN}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ prompt: finalPrompt }),
+                }
+            );
+            contentType = apiResponse.headers.get("Content-Type") || "image/png";
         }
 
-        // Das Bild als Blob (Daten) holen
-        const imageBlob = await cfResponse.blob();
+        // 4. Gemeinsame Antwort-Logik (für BEIDE)
+        if (!apiResponse.ok) {
+            const errorText = await apiResponse.text();
+            throw new Error(`API error (${apiResponse.status}): ${errorText}`);
+        }
 
-        // 5. Bild an die UI zurücksenden
-        // Wir setzen den Header, damit der Browser weiß, dass es ein Bild ist
-        res.setHeader("Content-Type", imageBlob.type || "image/png");
-
-        // Konvertiere Blob zu einem Buffer und sende es
+        // Bild-Blob holen
+        const imageBlob = await apiResponse.blob();
         const imageBuffer = Buffer.from(await imageBlob.arrayBuffer());
-        res.status(200).send(imageBuffer);
 
-        /* // Alternative: Hugging Face (falls du lieber das nutzen willst)
-    const hfResponse = await fetch(
-      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: finalPrompt }),
-      }
-    );
-    const hfImageBlob = await hfResponse.blob();
-    res.setHeader('Content-Type', hfImageBlob.type || 'image/jpeg');
-    const hfImageBuffer = Buffer.from(await hfImageBlob.arrayBuffer());
-    res.status(200).send(hfImageBuffer);
-    */
+        // 5. Bild (Blob) direkt an das Frontend zurücksenden
+        res.setHeader("Content-Type", contentType);
+        res.status(200).send(imageBuffer);
     } catch (error) {
-        console.error(error);
+        console.error("Handler error:", error);
         res.status(500).json({ error: "Failed to generate image", details: error.message });
     }
 }
