@@ -1,5 +1,5 @@
 // Dateiname: /api/generate.js
-// KORRIGIERTE VERSION mit dem neuen Hugging Face Router-Endpunkt
+// 2. KORREKTURVERSUCH für Hugging Face (Fix für 404-Fehler)
 
 export default async function handler(req, res) {
     // 1. Guards und Daten holen
@@ -21,12 +21,13 @@ export default async function handler(req, res) {
     try {
         // 3. ENTSCHEIDUNG: Welche Engine wird genutzt?
         if (engine === "hf") {
-            // --- KORRIGIERTE LOGIK FÜR HUGGING FACE ---
+            // --- KORRIGIERTE LOGIK FÜR HUGGING FACE (v2) ---
             if (!HF_TOKEN) throw new Error("Missing HF_TOKEN");
 
-            // Der neue Endpunkt, den die Fehlermeldung vorschlägt:
-            const ROUTER_URL = "https://router.huggingface.co/hf-inference";
-            const MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"; // Das Modell, das wir nutzen wollen
+            // Die 404-Fehlermeldung legt nahe, dass die URL unvollständig war.
+            // Wir hängen jetzt die Modell-ID an die Router-URL an.
+            const MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0";
+            const ROUTER_URL = `https://router.huggingface.co/hf-inference/${MODEL_ID}`; // NEUE URL
 
             apiResponse = await fetch(ROUTER_URL, {
                 method: "POST",
@@ -35,7 +36,7 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    model: MODEL_ID, // WICHTIG: Modell-ID jetzt im Body
+                    // "model" ist jetzt Teil der URL, also nicht mehr im Body nötig
                     inputs: finalPrompt,
                 }),
             });
