@@ -74,13 +74,9 @@
             </div>
 
             <div class="flex gap-3 mt-6">
-                <input
-                    id="workerUrl"
-                    class="flex-1 p-2 rounded bg-gray-800 border border-gray-700"
-                    placeholder="Dein Worker Webhook URL (z. B. https://.../generate)" />
                 <button
                     id="generateBtn"
-                    class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700">
+                    class="w-full px-4 py-3 rounded bg-indigo-600 hover:bg-indigo-700 font-semibold">
                     Generate Images
                 </button>
             </div>
@@ -94,58 +90,79 @@
             const generateBtn = document.getElementById("generateBtn");
             const statusEl = document.getElementById("status");
             const resultsEl = document.getElementById("results");
+            const promptEl = document.getElementById("prompt");
 
             function getSelectedStyles() {
                 const boxes = Array.from(document.querySelectorAll(".style-checkbox"));
                 const chosen = boxes.filter((b) => b.checked).map((b) => b.value);
-                return chosen.length
-                    ? chosen
-                    : [
-                          "Anime / Manga",
-                          "Hyperrealistic / Photoreal",
-                          "Cyberpunk / Neon",
-                          "Vintage Film / 35mm",
-                          "Surreal / Dreamcore",
-                      ];
+                return chosen;
             }
 
             generateBtn.addEventListener("click", async () => {
-                const prompt = document.getElementById("prompt").value.trim();
-                const workerUrl = document.getElementById("workerUrl").value.trim();
-                if (!prompt || !workerUrl) {
-                    alert("Bitte Thema + Worker URL angeben");
+                const prompt = promptEl.value.trim();
+                const styles = getSelectedStyles();
+
+                if (!prompt) {
+                    alert("Bitte ein Thema angeben.");
+                    return;
+                }
+                if (styles.length === 0) {
+                    alert("Bitte mindestens einen Stil auswählen.");
                     return;
                 }
 
-                const styles = getSelectedStyles();
-                statusEl.textContent = "Job gesendet — generiere Bilder…";
+                // Button deaktivieren und Status löschen
+                generateBtn.disabled = true;
+                generateBtn.textContent = "Generiere...";
+                statusEl.textContent = `Sende ${styles.length} Aufträge...`;
                 resultsEl.innerHTML = "";
 
-                try {
-                    const res = await fetch(workerUrl, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ input: prompt, styles }),
-                    });
-                    const data = await res.json();
-                    if (data.error) {
-                        statusEl.textContent = "Fehler: " + data.error;
-                        return;
-                    }
-                    statusEl.textContent = "Bilder generiert: " + (data.images?.length || 0);
-                    (data.images || []).forEach((item) => {
+                // Schleife: Rufe die API für JEDEN ausgewählten Stil einzeln auf
+                for (const style of styles) {
+                    statusEl.textContent = `Generiere Stil: ${style}...`;
+                    try {
+                        // 1. Rufe unsere Vercel API-Funktion auf
+                        const response = await fetch("/api/generate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            // 2. Sende das Format, das api/generate.js erwartet
+                            body: JSON.stringify({
+                                prompt: prompt,
+                                style: style, // Wichtig: 'style' (Einzahl)
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Server-Fehler: ${response.statusText}`);
+                        }
+
+                        // 3. Die Antwort ist ein Bild-Blob (kein JSON)
+                        const imageBlob = await response.blob();
+                        const imageUrl = URL.createObjectURL(imageBlob);
+
+                        // 4. Erstelle die Ergebnis-Karte und zeige das Bild an
                         const card = document.createElement("div");
                         card.className = "bg-gray-800 p-3 rounded";
                         card.innerHTML = `
-        <div class="text-sm text-gray-300 mb-2">${item.style}</div>
-        <img src="${item.url}" alt="${item.style}" class="w-full rounded mb-2"/>
-        <a href="${item.url}" target="_blank" class="text-indigo-400 text-sm">Open / Download</a>
-      `;
+                            <div class="text-sm text-gray-300 mb-2">${style}</div>
+                            <img src="${imageUrl}" alt="${style}" class="w-full rounded mb-2"/>
+                            <a href="${imageUrl}" target="_blank" download="${prompt.replace(
+                            /\s+/g,
+                            "_"
+                        )}-${style}.png" class="text-indigo-400 text-sm">Open / Download</a>
+                        `;
                         resultsEl.appendChild(card);
-                    });
-                } catch (err) {
-                    statusEl.textContent = "Fehler: " + err.message;
+                    } catch (err) {
+                        console.error(err);
+                        statusEl.textContent = `Fehler bei Stil ${style}: ${err.message}`;
+                        // Mache trotzdem mit dem nächsten Stil weiter
+                    }
                 }
+
+                // Fertig
+                statusEl.textContent = `Fertig! ${styles.length} Bilder generiert.`;
+                generateBtn.disabled = false;
+                generateBtn.textContent = "Generate Images";
             });
         </script>
     </body>
