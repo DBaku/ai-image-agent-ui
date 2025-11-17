@@ -1,5 +1,5 @@
 // Dateiname: /api/generate.js
-// 2. KORREKTURVERSUCH für Hugging Face (Fix für 404-Fehler)
+// 4. KORREKTURVERSUCH für Hugging Face (Modell-Wechsel)
 
 export default async function handler(req, res) {
     // 1. Guards und Daten holen
@@ -21,28 +21,28 @@ export default async function handler(req, res) {
     try {
         // 3. ENTSCHEIDUNG: Welche Engine wird genutzt?
         if (engine === "hf") {
-            // --- KORRIGIERTE LOGIK FÜR HUGGING FACE (v2) ---
+            // --- KORRIGIERTE LOGIK FÜR HUGGING FACE (v4) ---
+            // Wir gehen zurück zur 'api-inference' URL, aber
+            // nutzen ein älteres, zuverlässigeres Modell.
             if (!HF_TOKEN) throw new Error("Missing HF_TOKEN");
 
-            // Die 404-Fehlermeldung legt nahe, dass die URL unvollständig war.
-            // Wir hängen jetzt die Modell-ID an die Router-URL an.
-            const MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0";
-            const ROUTER_URL = `https://router.huggingface.co/hf-inference/${MODEL_ID}`; // NEUE URL
+            const MODEL_ID = "stabilityai/stable-diffusion-2"; // ÄLTERES MODELL!
+            const API_URL = `https://api-inference.huggingface.co/models/${MODEL_ID}`; // ORIGINALE URL-STRUKTUR
 
-            apiResponse = await fetch(ROUTER_URL, {
+            apiResponse = await fetch(API_URL, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${HF_TOKEN}`,
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    // "model" ist jetzt Teil der URL, also nicht mehr im Body nötig
                     inputs: finalPrompt,
+                    // "options": { "wait_for_model": true } // Kann helfen, wenn das Modell "kalt" ist
                 }),
             });
             contentType = apiResponse.headers.get("Content-Type") || "image/jpeg";
         } else {
-            // --- LOGIK FÜR CLOUDFLARE (Standard) ---
+            // --- LOGIK FÜR CLOUDFLARE (Funktioniert) ---
             if (!CF_TOKEN || !CF_ACCOUNT_ID) throw new Error("Missing CF_TOKEN or CF_ACCOUNT_ID");
 
             apiResponse = await fetch(
